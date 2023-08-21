@@ -1,0 +1,869 @@
+---
+title: "A4 - Anàlisi de variància"
+author: "Salvador Sanchis Beneseit"
+date: '`r format(Sys.Date(),"%B %e, %Y")`'
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_libraries, include=FALSE}
+library(knitr)
+```
+
+------------------------------------------------------------------------
+
+<br>
+
+## 1. Introducció
+
+<br>
+
+## 2. Lectura del fitxer i preparació de les dades
+
+<br>
+
+```{r}
+adult <- read.csv("~/DS21:22/advanced statistics/PAC/4/CensusIncomedata.txt", sep="")
+```
+
+<br>
+
+### 2.1 Preparació de les dades
+
+<br>
+
+Eliminem espais en blanc i convertim text a factors:
+
+```{r}
+cols <- c('workclass', 'marital_status', 'occupation', 'race', 'sex')
+adult[cols] <- lapply(adult[cols], trimws)
+adult[cols] <- lapply(adult[cols], factor)
+```
+
+\
+<br>\
+Modifiquem el nom de la columna 'sex':
+
+```{r}
+colnames(adult)[7] <- 'gender'
+```
+
+<br>
+
+En l'histograma de la variable 'income' hi veiem una asimetria (cua a
+l'esquerra):
+
+```{r}
+hist(adult$income)
+
+```
+
+<br>
+
+En el gràfic Q-Q hi veiem una desviació de la normalitat en la
+superposició dels punts sobre la línia:
+
+```{r}
+qqnorm(adult$income)
+qqline(adult$income)
+```
+
+<br>
+
+I finalment, el valor-p del test de Lilliefors ens confirma que la
+variable 'income' no es distribueix segons una distribució normal:
+
+```{r}
+library(nortest)
+lillie.test(adult$income)
+```
+
+\
+<br>
+
+Creem la nova variable 'Less50':
+
+```{r}
+adult$Less50 <- cut(adult$income, breaks=c(0,50,70), right = FALSE, labels = c(1, 0))
+```
+
+\
+<br>
+
+### 2.2 Anàlisi visual
+
+\
+<br>
+
+Els diagrames de caixa ens indiquen que el salari és superior en el cas
+dels homes:
+
+```{r}
+library(ggplot2)
+ggplot(aes(y=income, x=gender), data=adult) + geom_boxplot()
+```
+
+<br>
+
+També veiem diferències pel que fa a la raça, on els salaris més alts es
+troben en el sector de raça blanca:
+
+```{r}
+ggplot(aes(y=income, x=race), data=adult) + geom_boxplot()
+```
+
+<br>
+
+Pel que fa al perfil laboral, els funcionaris semblen tenir salaris més
+alts:
+
+```{r}
+ggplot(aes(y=income, x=workclass), data=adult) + geom_boxplot()
+```
+
+<br>
+
+I l'estat civil que sembla acaparar salaris més alts és casat:
+
+```{r}
+ggplot(aes(y=income, x=marital_status), data=adult) + geom_boxplot()
+```
+
+<br>
+
+Pel que fa a la tipologia, els salaris més alts es concentren en les
+categories blue-collar, white-collar i professional:
+
+```{r}
+ggplot(aes(y=income, x=occupation), data=adult) + geom_boxplot()
+```
+
+\
+<br>
+
+Pel que fa a les variables contínues, veiem que la tendència és envers
+salaris més alts tal com augmenta l'edat (per aquest gràfic hem eliminat
+els registres amb edat=99, que considerem que poden ser valors buits):
+
+```{r}
+ageplot <- adult[!(adult$age==90),]
+ggplot(aes(x =age, y = income), data = ageplot) + geom_point(alpha=.1) +
+  geom_smooth()
+```
+
+<br>
+
+La variable hores de treball ens mostra els salaris més alts entorn les
+50 hores setmanals. Hi ha un augment addicional en la zona de les 90+
+hores setmanals, però amb un marge d'error també superior, ja que es
+tracta de pocs casos. (Hem eliminat 83 registres amb un valor de 99
+hores setmanals treballades):
+
+```{r}
+hoursplot <- adult[!(adult$hours_per_week==99),]
+ggplot(aes(x =hours_per_week, y = income), data = hoursplot) + geom_point(alpha=.1) + geom_smooth()
+```
+
+<br>
+
+Finalment, per que fa als anys d'estudi, veiem un augment constant dels
+salaris en relació als anys d'educació:
+
+```{r}
+ggplot(aes(x =education_num, y = income), data = adult) + geom_point(alpha=.1) + geom_smooth()
+```
+
+\
+<br>
+
+## 3. Estadística inferencial
+
+<br>
+
+### 3.1 Contrastos d'hipòtesi
+
+<br>
+
+#### 3.1.1. Hipòtesi nul·la i alternativa (pel gènere i pel cas racial)
+
+\
+<br>
+
+Pel gènere:\
+H~0~ : 𝛍~men_income~ = 𝛍~women_income~
+
+H~1~ : 𝛍~men_income~ \> 𝛍~women_income~
+
+La hipòtesi nul·la és que, de mitjana, els homes cobren igual que les
+dones.
+
+La hipòtesi alternativa és que la mitjana de salari dels homes és
+superior a la mitjana de salari de les dones.
+
+Pel que fa al cas racial:
+
+H~0~ : 𝛍~1~ - 𝛍~2 =~ 6.45k€
+
+H~0~ : 𝛍~1~ - 𝛍~2 >~ 6.45k€
+
+on 𝛍~1~ denota la mitjana de salari de la gent blanca i 𝛍~2~ la mitjana
+de salari de la gent negra.
+
+<br>
+
+#### 3.1.2. Justificació del test a aplicar (pel gènere i pel cas racial)
+
+<br>
+
+Agrupem els casos segons els factors:
+
+```{r}
+
+men_s <- adult$income[adult$gender=="Male"]
+women_s <- adult$income[adult$gender=="Female"] 
+
+white_s <- adult$income[adult$race=="White"]
+black_s <- adult$income[adult$race=="Black"] 
+```
+
+<br>
+
+Per les dues hipòtesis, assumim normalitat segons el teorema del límit
+central i en ambdós casos fem un contrast d'hipòtesi de dues mostres
+sobre la mitjana.
+
+Primer comparem variàncies:
+
+```{r}
+
+var.test(men_s, women_s)
+```
+
+```{r}
+var.test(white_s, black_s)
+```
+
+<br>
+
+En ambdós casos la variància és desconeguda i diferent, i per tant farem
+un test sobre mitjana de dues mostres independents amb variància
+desconeguda i diferent.
+
+<br>
+
+#### 3.1.3. Aplicació, interpretació i comprovació del test (pel gènere i pel cas racial)
+
+<br>
+
+Definim la funció per a realitzar el test:
+
+```{r}
+ind_ttest <- function(x,y,d){
+x1 <-mean(x)
+x2 <-mean(y)
+var_1 <- var(x)
+var_2 <- var(y)
+n1 <- length(x)
+n2 <- length(y)
+sn_1 <- var_1 / n1
+sn_2 <- var_2 / n2
+estadístic_de_contrast <- (x1-x2-d) / sqrt((var_1/n1)+(var_2/n2))
+graus_de_llibertat <- ((sn_1 + sn_2)^2) / (((sn_1^2)/(n1-1))+((sn_2^2)/(n2-1)))
+valor_p <- pt(estadístic_de_contrast, graus_de_llibertat, lower.tail = FALSE)
+valor_crític <- qt(.95, df= graus_de_llibertat)
+return(data.frame(estadístic_de_contrast, graus_de_llibertat, valor_crític, valor_p)) }
+```
+
+<br>
+
+Apliquem el test pel cas de gènere:
+
+```{r}
+ind_ttest(men_s, women_s, 0)
+
+```
+
+<br>
+
+El resultat del test, amb un valor observat de 194.11, per sobre del
+valor crític de 1.64, i un valor p 0, ens indica que cal rebutjar la
+hipòtesi nul·la i acceptar la hipòtesi alternativa segons la qual els
+homes cobren més que les dones.
+
+Comprovem els resultats:
+
+```{r}
+t.test(men_s, women_s, alternative = "greater", var.equal = FALSE)
+```
+
+<br>
+
+Apliquem el mateix test pel cas racial, amb una diferència de mitjana de
+6450€:
+
+```{r}
+ind_ttest(white_s, black_s, 6.45)
+```
+
+\
+<br>
+
+Amb un estadístic de contrast de 2.04, just per sobre del valor crític
+1.64, i un valor p de 0.02, per sota del llindar de 0.05, podem rebutjar
+la hipòtesi nul·la i concloure que les persones de raça blanca cobren
+més de 6450€ per sobre del salari de les persones de raça negra.
+
+Comprovem els resultats:
+
+```{r}
+t.test(white_s, black_s, alternative = "greater", mu= 6.45, var.equal = FALSE)
+```
+
+\
+<br>\
+<br>
+
+## 4. Model de regressió lineal
+
+\
+<br>
+
+### 4.1. Estimació de models
+
+<br>
+
+```{r}
+linear_1 <- lm(income~age+education_num+hours_per_week+gender, data = adult)
+summary(linear_1)
+```
+
+\
+<br>
+
+```{r}
+linear_2 <- lm(income~age+education_num+hours_per_week+gender+race, data = adult)
+summary(linear_2)
+```
+
+\
+<br>
+
+### 4.2. Interpretació dels models
+
+\
+<br>
+
+Trobem relacions significatives per a totes les variables explicatives
+d'ambdós models (tots els valors p\<2.2e-16), amb l'excepció del factor
+"Asian-Pac_Islander" de la variable race(p=0.418).
+
+Les variables que contribueixen en major grau al model són les variables
+gènere i raça. Concretament, el factor 'Male' de la variable gènere
+mostra una alta relació positiva amb la variable dependent income. Pel
+que fa a la variable raça, els factors 'black' i, especialment, 'white,
+també mostren una relació lineal positiva, i el factor 'other' mostra
+una relació negativa.
+
+El coeficient de determinació del primer model és de R^2^=0.5891, i el
+del segon model és de R^2^=0.6674. Per tant, podem afirmar que hi ha
+hagut una millora del model quan hem introduït la variable raça.
+
+\
+<br>
+
+### 4.3. Anàlisi de residus
+
+\
+<br>
+
+La ditribució dels residus del model 2 és gairebé perfectament simètrica
+entorn un valor mitjà de 0 (min -15, max 16, 1Q -2.8, 3Q 2.7) i això
+indica una bona adequació del model.\
+<br>
+
+En un primer gràfic de residus contra valors ajustats veiem un patró
+força arbitrari, i per tant no sospitem que hi hagi un problema
+d'heterocedasticitat i assumim una variància constant en els errors del
+model.
+
+```{r}
+plot(linear_2, which = 1)
+```
+
+<br>
+
+En un gràfic Q-Q veiem que les dades s'justen bé a una distribució
+normal:
+
+```{r}
+plot(linear_2, which = 2)
+```
+
+\
+<br>
+
+### 4.4. Predicció
+
+\
+<br>\
+Aquesta és la predicció del model per a un seguit de dades, amb un
+interval de confiança del 95%:
+
+```{r}
+pre <- data.frame(age=24, education_num= 4, hours_per_week=40, gender='Female', race='Black')
+predict(linear_2, pre, interval = "confidence")
+```
+
+<br>
+
+## 5. Regressió logística
+
+\
+<br >
+
+### 5.1. Generació de conjunts d'entrenament i de test
+
+\
+<br>
+
+Primer de tot, reorganitzem l'ordre dels factors de les variables
+categòriques, ja que això ens serà necessari per dissenyar més endavant
+el model de regressió logística:
+
+```{r}
+adult <- within(adult, workclass <- relevel(workclass, ref = 'Private'))
+adult <- within(adult, marital_status <- relevel(marital_status, ref = 'Married'))
+adult <- within(adult, race <- relevel(race, ref = 'White'))
+adult <- within(adult, gender <- relevel(gender, ref = 'Male'))
+adult <- within(adult, Less50 <- relevel(Less50, ref = '0'))
+```
+
+<br>
+
+Generem els conjunts d'entrenament i test:
+
+```{r}
+set.seed(1234)
+div <- sample(2, nrow(adult), replace = T, prob = c(0.8, 0.2))
+train <- adult[div==1,]
+test <- adult[div==2,]
+```
+
+\
+<br>
+
+### 5.2. Model predictiu
+
+<br>
+
+Entrenem el model de regressió logística amb el conjunt 'train':
+
+```{r}
+log_1 <- glm(Less50 ~ age+workclass+education_num+marital_status+occupation+race+gender+hours_per_week, data = train, family = 'binomial')
+summary(log_1)
+```
+
+\
+<br>
+
+### 5.3. Interpretació
+
+<br>
+
+La variable edat contribueix lleugerament de forma negativa a la
+possibilitat d'un salari baix (per sota de 50k€). Per cada increment
+d'un any d'edat es multiplica per -0.03 la probabilitat d'un salari
+baix. La variable 'anys d'educació' té un efecte també negatiu, en un
+factor de 0.28 per any d'educació. La variable 'hores setmanals' també
+té un efecte negatiu, amb un augment amb factor -0.028 per hora
+treballada.
+
+Pel que fa al perfil de treball, ser funcionari té un efecte negatiu 3.5
+vegades major de tenir un salari baix respecte a treballar en el sector
+privat, mentre que els sectors 'autònoms' i 'desconegut' tenen uns
+efectes positius de 2.5 i 2.2 respectivament.
+
+Pel que fa a l'estat civil, prenent l'estat de casat com a referència,
+els estats 'divorciat', 'separat', 'solter' i 'vidu' tenen tots efectes
+positius sobre la possibilitat d'un salari baix, amb magnituds de 2.7,
+3.6, 3.4 i 2.9 respectivament.
+
+Pel que fa a la tipologia de treball, i respecte a la categoria 'Blue
+Collar', les categories 'desconegut', 'professional', 'vendes' i
+'serveis' tenen efectes positius sobre la possibilitat d'un salari baix,
+amb magnituds de 2.9, 1.77, 2.56, 2.63, mentre que la categoria
+'White-collar' disminueix la possibilitat d'un salari baix respecte a
+'Blue-collar' amb una magnitud de 1.71.
+
+Pel que fa a la raça, i respecte a la raça blanca, amerindis, asiàtics,
+negres i altres tenen relacions positives amb la possibilitat d'un
+salari baix, amb magnituds de 7.86, 7.81, 6.58 i 9.49 respectivament. De
+forma similar, les dones tenen un 8.47 més de possibilitats de tenir un
+salari baix respecte als homes.
+
+\
+<br>
+
+### 5.4. Matriu de confusió
+
+<br>
+
+Generem una predicció sobre el conjunt test:
+
+```{r}
+predict_Less50 <- predict(log_1, newdata = test, type = 'response')
+head(predict_Less50)
+
+```
+
+<br>
+
+Definim un llindar de 0.5 per les prediccions del model:
+
+```{r}
+pred_bin <- ifelse(predict_Less50>0.5, 1, 0)
+test$L50pred <- as.factor(pred_bin)
+```
+
+<br>
+
+Generem la matriu de confusió:
+
+```{r}
+library(caret)
+
+confusionMatrix(data = test$L50pred, reference = test$Less50, positive = '1')
+```
+
+A partir dels resultats de la matriu de confusió, amb 292 falsos
+negatius sobre un total de 3209 possibles obtenim una especificitat molt
+alta (94%), i amb 198 falsos positius sobre un total possible de 3297,
+el model obté una sensibilitat també molt alta (92%),\
+<br>
+
+### 5.5. Predicció
+
+\
+<br>
+
+Calculem manualment un primer cas:
+
+```{r}
+coefficients_calc_1 <- 0.187761+(20*-0.026909)+2.510501+(3*-0.282361)+3.474572+1.779379+(25*-0.026270)
+
+Probability_1 = 1 / (1 + exp(-coefficients_calc_1))
+Probability_1
+```
+
+Contrastem el resultat:
+
+```{r}
+
+income_1 <- data.frame(age=20, workclass='Self-Employed', education_num=3, marital_status='Single', occupation='Professional', race='White', gender='Male', hours_per_week=25)
+predict(log_1, income_1, type = 'response')
+```
+
+\
+<br>
+
+Calculem manualment un segon cas:
+
+```{r}
+coefficients_calc_2 <- 0.187761+(60*-0.026909)-3.503788+(15*-0.282361)-1.716526+6.579412+(35*-0.026270)
+Probability_2 = 1 / (1 + exp(-coefficients_calc_2))
+Probability_2
+```
+
+Contrastem el resultat:
+
+```{r}
+income_2 <- data.frame(age=60, workclass='Government', education_num=15, marital_status='Married', occupation='White-Collar', race='Black', gender='Male', hours_per_week=35)
+predict(log_1, income_2, type = 'response')
+```
+
+\
+<br >
+
+## 6. Anàlisi de la variància (ANOVA) d'un factor
+
+\
+<br>
+
+### 6.1. Anàlisi de la variància (ANOVA) d'un factor
+
+\
+<br>
+
+Recuperem un gràfic que ja hem presentat en l'apartat 2.2:
+
+```{r}
+ggplot(aes(y=income, x=race), data=adult) + geom_boxplot()
+```
+
+En el gràfic observem que sembla haver-hi un efecte del factor raça, amb
+els individus de raça blanca que obtenen una mitjana de salaris més alta
+que la resta.
+
+\
+<br>\
+
+### 6.2. Model ANOVA
+
+<br>
+
+#### 6.2.1. Formuleu el model
+
+\
+<br>
+
+L'ANOVA planteja si hi ha diferències entre les mitjanes que s'obtenen
+de la variable dependent en diversos nivells (factors) de la variable
+independent. Encara que es prenen les mitjanes com a referència, el que
+l'ANOVA calcula és la diferència de variància, ja que és necessari poder
+detectar si dues mitjanes similars provenen de factors amb una
+distribució mot diferent l'una de l'altra. Prenent com a referència
+global la mitjana de tota la mostra, en aquest cas el que el model
+planteja és si hi ha diferències entre les mitjanes de salari que
+s'obtenen per a cada grup racial, és a dir, si totes són iguals, o si
+n'hi ha dues que són significativament diferents entre elles.
+
+\
+<br>
+
+#### 6.2.2. Hipòtesi nul·la i alternativa
+
+<br>
+
+H~0~ : 𝛍~white~ = 𝛍~black~ = 𝛍~black  ... =~ 𝛍~other~ = 𝛍
+
+H~1~ : 𝛍~i~ \> 𝛍~j~ per a algun i ≠ j\
+
+<br>
+
+#### 6.2.3. Estimeu la significació del factor grup racial
+
+<br>
+
+Obtenim la taula ANOVA:
+
+```{r}
+resultat_1 <- lm(income~race, data = adult)
+table_1 <- anova(resultat_1)
+table_1
+```
+
+<br>
+
+Calculem la variabilitat explicada per la variable 'race', que resulta
+ser d'un 13%:
+
+```{r}
+variabilitat <- 211909/(211909+1427206)
+variabilitat
+```
+
+\
+<br>
+
+#### 6.2.4. Estimeu els efectes dels nivells del factor
+
+<br>
+
+Calculem els efectes de cada factor separadament, confirmant que només
+el nivell 'white' contribueix positivament a l'increment del salari:
+
+```{r}
+resultat_2 <- aov(income~race, data = adult)
+model.tables(resultat_2, type='effects')
+```
+
+<br>
+
+#### 6.2.5. Realitzeu els contrastos dos-a-dos
+
+<br>
+
+Realitzem un test LSD, on veiem que hi ha diferències significatives
+entre el grup blancs i la resta dels grups, i també del grup 'altres'
+envers la resta. Els resultats ens mostren 4 subgrups, amb diferències
+significatives entre cada subgrup (els subgrups s'identifiquen amb les
+lletres a, b, c i d en els resultats del test):
+
+```{r}
+library(agricolae)
+LSD.test(resultat_1, 'race', group=T, p.adj='bonferroni', console=T)
+```
+
+\
+<br>
+
+Realitzem un segon test que confirma els resultats, on hi podem veure
+els nivells de significació de les diferències entre grups:
+
+```{r}
+library(stats)
+pairwise.t.test(adult$income, adult$race, p.adj='bonferroni')
+```
+
+\
+<br>
+
+#### 6.2.6. Adequació del model
+
+\
+<br>
+
+##### 6.2.6.1. Homocedasticitat dels residus
+
+\
+<br>
+
+```{r}
+plot(resultat_1, which = 1)
+```
+
+No observem un patró molt clar en el gràfic, i per tant no podem afirmar
+que hi hagi un problema d'homocedasticitat.\
+<br>
+
+##### 6.2.6.2. Normalitat dels residus
+
+<br>
+
+```{r}
+plot(resultat_1, which = 2)
+```
+
+Sí que observem, en canvi, una desviació de la normalitat dels residus.
+
+Seguidament, apliquem un test de Kruskal-Wallis, que no assumeix la
+normalitat de la distribució de les dades, i obtenim resultats que
+confirmen la diferència significativa entre grups:
+
+```{r}
+kruskal.test(income~race, data = adult)
+```
+
+\
+<br>
+
+## 7. ANOVA multifactorial
+
+\
+<br>
+
+### 7.1. Estudi visual de la interacció
+
+\
+<br>
+
+A la següent taula veiem que no tenim un escenari balancejat, ja que
+tenim un nombre diferent de mostres per a cada condició. El problema de
+treballar amb un escenari no balancejat és que, d'una banda, es redueix
+el poder estadístic de la prova, i de l'altra banda, l'estadístic de la
+prova és menys sensible a possibles desviacions de l'homocedasticitat.
+
+```{r}
+table(adult$race, adult$occupation)
+```
+
+\
+<br>
+
+En el següent gràfic representem la interacció entre els factors raça i
+ocupació. A primera vista és difícil detectar si hi ha interacció:
+
+```{r}
+library(ggplot2)
+library(interactions)
+inter <- lm(income~race*occupation, data = adult)
+cat_plot(inter, pred=occupation, modx=race, geom='line')
+```
+
+\
+<br>
+
+En canvi, si ordenem els nivells de forma diferent, detectem un possible
+efecte d'interacció. Veiem, per exemple, que per les ocupacions
+'Blue-Collar' i 'Sales', la distància entre la raça blanca i la resta és
+més gran. En general, mentre la línia de la raça blanca dibuixa un
+descens gradual a través dels diferents nivells del factor ocupació, les
+altres races dibuixen altibaixos:
+
+```{r}
+adult$occupation <- factor(adult$occupation, levels = c('Blue-Collar', 'White-Collar', 'Professional', 'Sales', 'Service', 'Other/Unknown'))
+
+library(ggplot2)
+library(interactions)
+inter <- lm(income~race*occupation, data = adult)
+cat_plot(inter, pred=occupation, modx=race, geom='line')
+```
+
+\
+<br>
+
+## 8. Conclusions
+
+<br>
+
+Hem analitzat un conjunt de dades provinents d'un cens sobre els salaris
+i informació personal, amb un total de 32,560 registres i 9 variables.
+
+Després de preparar les dades per a l'anàlisi, hem realitzat una anàlisi
+visual, amb la qual hem inicialment observat que entre els grups
+diferents que hi ha al conjunt, els salaris més alts els concentren els
+homes, les persones de raça blanca, els funcionaris de l'estat, les
+persones casades, els obrers (lleugerament per sobre d'administradors i
+treballadors del sector professional), les persones de més edat enfront
+de les joves, les persones que treballen més hores per setmana, i les
+persones amb més anys d'estudis.
+
+Fent contrastos d'hipòtesis hem pogut comprovar que els homes cobren
+significativament més que les dones, i que les persones de raça blanca
+tenen un salari anual 6450€ per sobre del salari mitjà de les persones
+de raça negra.
+
+Amb un model de regressió lineal hem pogut comprovar que les variables
+'edat', 'anys d'educació', 'hores setmanals treballades', 'gènere' i
+'raça' contribueixen conjuntament a explicar un 67% de la variància de
+la variable 'salari anual'.
+
+Amb un model de regressió logística, on hem analitzat la possibilitat
+que un individu cobri menys de 50,000€ anuals, hem observat que els
+factors que contribueixen a aquesta possibilitat són tenir menys edat,
+treballar menys hores, ser autònom, ser separat o solter, treballar en
+els sectors de vendes o serveis, ser dona, i ser de qualsevol altra raça
+que blanca.
+
+Amb una anàlisi de la variància hem comprovat que les diferències entre
+mitjanes de salari entre grups racials són significatives. Tant la raça
+blanca com la raça negra tenen mitjanes de salari significativament
+diferents entre elles així com amb la resta de races. Com que els
+residus del model de regressió logística no es distribueixen amb
+normalitat, hem realitzat un test de Kruskal-Wallis per confirmar que
+aquestes diferències són estadísticament significatives.
+
+Finalment, hem fet un estudi preliminar a un model d'anàlisi de
+variància multifactorial prenent les races i les ocupacions com a
+factors explicatius del salari. Hem trobat que no tenim un escenari
+balancejat per tal d'estimar aquest model de forma òptima, i també hem
+observat un lleuger efecte d'interacció entre les variables explicatives
+raça i ocupació.
+
+<br>\
+\
+<br>\
+\
+<br>\
+\
+<br>
